@@ -52,6 +52,7 @@ type App struct {
 
 	started    int32
 	terminated int32
+	cordoned   int32
 
 	// обработчик health check probe
 	healthCheck healthcheck.Handler
@@ -117,6 +118,7 @@ func (a *App) runAdminServer(_ context.Context) {
 }
 
 // Run запуск приложения
+// 2026-11-17T22:54:30.461319846Z {"time":"2026-11-17T22:54:30.461195721Z","level":"ERROR","msg":"Ошибка основного сервера","error":"http: Server closed"}
 func (a *App) Run(ctx context.Context) {
 	if a.mainServer != nil {
 		go func() {
