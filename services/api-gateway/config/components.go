@@ -18,3 +18,28 @@ type HttpServer struct {
 type Graceful struct {
 	Timeout time.Duration `yaml:"timeout" env:"GRACEFUL_TIMEOUT"`
 }
+
+type Retry struct {
+	Default  RetryPolicy   `yaml:"__default__"`
+	Handlers []RetryPolicy `yaml:"handlers"`
+}
+
+
+type RetryPolicy struct {
+	Method                         string        `yaml:"method"`
+	Enabled                        *bool         `yaml:"enabled"` 
+	SeparateRetryPerHandlerEnabled bool          `yaml:"separate_retry_per_handler_enabled"`
+	Timeout                        time.Duration `yaml:"timeout"`
+	MaxAttempts                    int           `yaml:"max_attempts"`
+	InitialBackoff                 time.Duration `yaml:"initial_backoff"`
+	MaxBackoff                     time.Duration `yaml:"max_backoff"`
+	BackoffMultiplier              float64       `yaml:"backoff_multiplier"`
+	RetryableCodes                 []string      `yaml:"retryable_codes"` 
+	Throttler                      *Throttler    `yaml:"throttler"`
+}
+
+type Throttler struct {
+	ThrottlingEnabled  bool    `yaml:"throttling_enabled"`
+	ThrottleMaxTokens  float64 `yaml:"throttle_max_tokens"`
+	ThrottleTokenRatio float64 `yaml:"throttle_token_ratio"`
+}
