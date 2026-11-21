@@ -18,7 +18,6 @@ service:
   rental: "rental:9090"
   pricing: "pricing:9090"
 
-
 # Для локального запуска через make config-etcd. В k3s endpoint задан в Deployment.
 runtime_config:
   endpoints: ["http://127.0.0.1:2379"]
@@ -26,3 +25,40 @@ runtime_config:
   schema_path: rtconfig.yaml
   startup_timeout: 5s
   shutdown_timeout: 3s
+
+retry:
+  __default__:
+    enabled: false
+    separate_retry_per_handler_enabled: false
+
+    # p = 0.05 (Unavailable rate), N = 6000 requests, n = max_attempts, m = backoff_multiplier
+    timeout: 250ms # p99_target - margin = 300 - 50; worst: 1.2*sum_backoff + n*RPC_p99 <= timeout -> 168 + 4*RPC_p99 <= 250
+    max_attempts: 4
+    # p^n - user error;
+    # N*p^n - expected errors;
+    # P(0 errors) = (1 - p^n)^N ~ e^(-N*p^n); n=3 -> 47%, n=4 -> 96%
+    initial_backoff: 20ms
+    # initial_backoff_max = (timeout - n*RPC_p99) / 1.2 / S,
+    # S = 1 + m + ... + m^(n-2) = 7
+    max_backoff: 80ms # = initial_backoff * m^(n-2), last pause; with jitter (x0.8..1.2) up to 96ms
+    backoff_multiplier: 2 # = (max_backoff / initial_backoff)^(1/(n-2)) = (80/20)^(1/2); sum_backoff = initial_backoff*(m^(n-1) - 1)/(m - 1) = 140ms
+    retryable_codes: [Unavailable]
+    throttler:
+      throttling_enabled: true
+      throttle_max_tokens: 26
+      # N = 600
+      # допустимый процент = 2%
+      # B = floor(600 * 2 / 100) = 12
+      # M = 2 * (B + 1) = 2 * 13 = 26
+      # порог = M / 2 = 13
+      # итого попыток <= N + B = 612
+      throttle_token_ratio: 0.1
+
+  # нижняя граница p / (1 - p) = 0.05 / 0.95 ~ 0.053
+  # 20 * 0.0526 ~ 1.05 токена списано в секунду при ошибках
+  # верхняя граница - это запас мощности, который сервер может выдержать, допустим 10-20%
+  # p / (1 - p)   <=   throttle_token_ratio   <=   запас мощности зависимости
+  # 0.1: 10 successes per error, refill 20 * 0.1 = 2.0 > spend 1.05 tokens/s -> budget stays full at 5% errors
+  handlers:
+    - method: /scooter.scooter.v1.ScooterService/GetScooter
+      enabled: true

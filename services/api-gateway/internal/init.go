@@ -40,6 +40,7 @@ import (
 	externalRentalV1 "api-gateway/internal/pkg/pb/external/rental/rental/v1"
 	externalScooterV1 "api-gateway/internal/pkg/pb/external/scooter/scooter/v1"
 	"api-gateway/internal/pkg/requestid"
+	"api-gateway/internal/pkg/retry"
 	"api-gateway/internal/pkg/rtconfig/global"
 )
 
@@ -192,10 +193,18 @@ func (a *App) initGrpcConn(_ context.Context) error {
 	for srv, address := range config.Instance().Targets {
 		var err error
 
-		conn, err := grpc.NewClient(address,
+		opts := []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithUnaryInterceptor(intercept.ProxyMetadata()),
-		)
+		}
+		if srv == config.ScooterService {
+			sc, err := retry.ServiceConfig(config.Instance().Retry, "scooter.scooter.v1.ScooterService")
+			if err != nil {
+				return fmt.Errorf("retry-конфиг %s: %w", srv, err)
+			}
+			opts = append(opts, grpc.WithDefaultServiceConfig(sc))
+		}
+		conn, err := grpc.NewClient(address, opts...)
 
 		if err != nil {
 			return fmt.Errorf(
