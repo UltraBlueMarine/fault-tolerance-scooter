@@ -58,7 +58,7 @@ retry:
   # 20 * 0.0526 ~ 1.05 токена списано в секунду при ошибках
   # верхняя граница - это запас мощности, который сервер может выдержать, допустим 10-20%
   # p / (1 - p)   <=   throttle_token_ratio   <=   запас мощности зависимости
-  # 0.1: 10 successes per error, refill 20 * 0.1 = 2.0 > spend 1.05 tokens/s -> budget stays full at 5% errors
+  # 0.1: 10 успехов на 1 ошибку, пополнение 20 * 0.1 = 2.0 > списания 1.05 токена/с -> при 5% ошибок бюджет остаётся полным
   handlers:
     - method: /scooter.scooter.v1.ScooterService/GetScooter
       enabled: true
