@@ -125,6 +125,7 @@ func (a *App) initMainServer(ctx context.Context) error {
 		}()
 
 		select {
+		// 2026-11-17T22:54:30.461335846Z {"time":"2026-11-17T22:54:30.461277471Z","level":"INFO","msg":"Основной сервер остановлен","service":"pricing"}
 		case <-done:
 			slog.Info("Основной сервер остановлен", "service", "pricing")
 		case <-gracefulCtx.Done():
@@ -161,6 +162,14 @@ func (a *App) initAdminServer(ctx context.Context) error {
 	a.adminMux.HandleFunc(healthcheck.LivenessPath, a.healthCheck.LiveEndpoint)
 	a.adminMux.HandleFunc(healthcheck.ReadinessPath, a.healthCheck.ReadyEndpoint)
 	a.adminMux.HandleFunc(healthcheck.StartupPath, a.healthCheck.StartupEndpoint)
+	a.adminMux.Post("/cordon", func(w http.ResponseWriter, r *http.Request) {
+		atomic.StoreInt32(&a.cordoned, 1)
+		w.WriteHeader(http.StatusOK)
+	})
+	a.adminMux.Post("/uncordon", func(w http.ResponseWriter, r *http.Request) {
+		atomic.StoreInt32(&a.cordoned, 0)
+		w.WriteHeader(http.StatusOK)
+	})
 
 	return nil
 }
@@ -205,11 +214,26 @@ func (a *App) initHealthCheck(_ context.Context) error {
 	})
 
 	// readiness - т.к. я уже проинициализировал все компоненты
+
 	a.healthCheck.AddReadinessCheck("started", func() error {
 		if atomic.LoadInt32(&a.started) != 0 {
 			return nil
 		}
 		return fmt.Errorf("Приложение ещё не запущено")
+	})
+
+	// a.healthCheck.AddReadinessCheck("ready", func() error{
+	// 	if a.storage.Tariffs.IsLoaded(){
+	// 		return nil
+	// 	}
+	// 	return fmt.Errorf("Тарифы не загружены в базу данных, приложение не готово.")
+	// })
+
+	a.healthCheck.AddReadinessCheck("cordon", func() error {
+		if atomic.LoadInt32(&a.cordoned) == 0 {
+			return nil
+		}
+		return fmt.Errorf("Cordon активен")
 	})
 
 	a.healthCheck.AddReadinessCheck("termination", func() error {
@@ -218,8 +242,9 @@ func (a *App) initHealthCheck(_ context.Context) error {
 		}
 		return fmt.Errorf("Приложение останавливается")
 	})
-
 	a.publicCloser.Add(func() error {
+		// 2026-11-17T22:54:27.439494761Z {"time":"2026-11-17T22:54:27.439372553Z","level":"INFO","msg":"Получен сигнал остановки","service":"pricing","timeout":10000000000}
+
 		slog.Info(
 			"Получен сигнал остановки",
 			"service",
@@ -245,6 +270,12 @@ func (a *App) initPostgres(ctx context.Context) error {
 
 func (a *App) initStorage(context.Context) error {
 	a.storage = storage.NewRegistry(a.pool)
+	a.healthCheck.AddReadinessCheck("ready", func() error {
+		if a.storage.Tariffs.IsLoaded() {
+			return nil
+		}
+		return fmt.Errorf("Тарифы не загружены в базу данных, приложение не готово.")
+	})
 	return nil
 }
 
