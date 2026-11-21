@@ -171,7 +171,6 @@ func (a *App) initAdminServer(ctx context.Context) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-
 	return nil
 }
 
@@ -216,13 +215,6 @@ func (a *App) initHealthCheck(_ context.Context) error {
 
 	// readiness - т.к. я уже проинициализировал все компоненты
 
-	a.healthCheck.AddReadinessCheck("cordon", func() error {
-		if atomic.LoadInt32(&a.cordoned) == 0 {
-			return nil
-		}
-		return fmt.Errorf("Cordon активен")
-	})
-
 	a.healthCheck.AddReadinessCheck("started", func() error {
 		if atomic.LoadInt32(&a.started) != 0 {
 			return nil
@@ -230,13 +222,19 @@ func (a *App) initHealthCheck(_ context.Context) error {
 		return fmt.Errorf("Приложение ещё не запущено")
 	})
 
-	a.healthCheck.AddReadinessCheck("ready", func() error{
-		if a.storage.Tariffs.IsLoaded(){
-			return nil 
+	// a.healthCheck.AddReadinessCheck("ready", func() error{
+	// 	if a.storage.Tariffs.IsLoaded(){
+	// 		return nil
+	// 	}
+	// 	return fmt.Errorf("Тарифы не загружены в базу данных, приложение не готово.")
+	// })
+
+	a.healthCheck.AddReadinessCheck("cordon", func() error {
+		if atomic.LoadInt32(&a.cordoned) == 0 {
+			return nil
 		}
-		return fmt.Errorf("Тарифы не загружены в базу данных, приложение не готово.")
+		return fmt.Errorf("Cordon активен")
 	})
-	
 
 	a.healthCheck.AddReadinessCheck("termination", func() error {
 		if atomic.LoadInt32(&a.terminated) == 0 {
@@ -272,6 +270,12 @@ func (a *App) initPostgres(ctx context.Context) error {
 
 func (a *App) initStorage(context.Context) error {
 	a.storage = storage.NewRegistry(a.pool)
+	a.healthCheck.AddReadinessCheck("ready", func() error {
+		if a.storage.Tariffs.IsLoaded() {
+			return nil
+		}
+		return fmt.Errorf("Тарифы не загружены в базу данных, приложение не готово.")
+	})
 	return nil
 }
 
